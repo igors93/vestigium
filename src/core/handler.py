@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 from types import TracebackType
-from typing import Callable
 
 from src.config import Config
 from src.reports.text_report import save_text_report
@@ -13,9 +13,10 @@ from .context import build_report
 
 ExceptionHook = Callable[
     [type[BaseException], BaseException, TracebackType | None],
-    object,
+    None,
 ]
 
+_HANDLER_MARKER = "__vestigium_installed__"
 _original_hook: ExceptionHook | None = None
 
 
@@ -24,7 +25,7 @@ def install_handler(config: Config) -> None:
 
     global _original_hook
 
-    if getattr(sys.excepthook, "__recorder_installed__", False):
+    if getattr(sys.excepthook, _HANDLER_MARKER, False):
         return
 
     _original_hook = sys.excepthook
@@ -45,15 +46,15 @@ def install_handler(config: Config) -> None:
             text_path = save_text_report(report, config)
 
             print(
-                f"\n[Recorder] Captured error: {report.error_id}",
+                f"\n[Vestigium] Captured error: {report.error_id}",
                 file=sys.stderr,
             )
-            print(f"[Recorder] JSON report: {json_path}", file=sys.stderr)
-            print(f"[Recorder] Text report: {text_path}\n", file=sys.stderr)
+            print(f"[Vestigium] JSON report: {json_path}", file=sys.stderr)
+            print(f"[Vestigium] Text report: {text_path}\n", file=sys.stderr)
         except Exception as capture_error:
-            # Error recording must never hide the original exception.
+            # Recording failures must never hide the original exception.
             print(
-                f"[Recorder] Failed to create report: {capture_error}",
+                f"[Vestigium] Failed to create report: {capture_error}",
                 file=sys.stderr,
             )
         finally:
@@ -64,5 +65,20 @@ def install_handler(config: Config) -> None:
                     traceback_object,
                 )
 
-    setattr(error_hook, "__recorder_installed__", True)
+    setattr(error_hook, _HANDLER_MARKER, True)
     sys.excepthook = error_hook
+
+
+def uninstall_handler() -> None:
+    """Restore the original exception handler when Vestigium owns it."""
+
+    global _original_hook
+
+    if not getattr(sys.excepthook, _HANDLER_MARKER, False):
+        _original_hook = None
+        return
+
+    if _original_hook is not None:
+        sys.excepthook = _original_hook
+
+    _original_hook = None

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .config import Config
-from .core.handler import install_handler
+from .core.handler import install_handler, uninstall_handler
 
 
 def start(
@@ -18,3 +18,9 @@ def start(
     )
     install_handler(config)
     return config
+
+
+def stop() -> None:
+    """Restore the exception handler that existed before start()."""
+
+    uninstall_handler()

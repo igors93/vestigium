@@ -22,8 +22,10 @@ def save_text_report(
 
 
 def render_text_report(report: ErrorReport) -> str:
+    """Render a report in a readable plain-text format."""
+
     lines = [
-        "ERROR REPORT",
+        "VESTIGIUM ERROR REPORT",
         "=" * 50,
         f"Error ID: {report.error_id}",
         f"Project: {report.project_name}",
@@ -62,13 +64,15 @@ def render_text_report(report: ErrorReport) -> str:
     for name, value in report.environment.items():
         lines.append(f"{name}: {value}")
 
-    lines.extend([
-        "",
-        "NOTE",
-        "-" * 50,
-        "This report describes the failure context.",
-        "Automatic replay is not part of this initial version.",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "NOTE",
+            "-" * 50,
+            "This report describes the failure context.",
+            "Automatic replay is not part of this initial version.",
+            "",
+        ]
+    )
 
     return "\n".join(lines)

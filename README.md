@@ -2,7 +2,7 @@
 
 Vestigium is a small error recorder for Python applications.
 
-This initial version captures uncaught exceptions and creates:
+It captures uncaught exceptions and creates:
 
 - a JSON report for structured data;
 - a text report for human reading;
@@ -12,27 +12,59 @@ This initial version captures uncaught exceptions and creates:
 
 ```text
 vestigium/
-├── README.md
-├── .gitignore
+├── .github/workflows/
 ├── src/
 ├── examples/
-└── tests/
+├── tests/
+├── pyproject.toml
+└── requirements-dev.txt
 ```
-
-The `src` package contains all application source code.
 
 ## Run the example
 
-Open a terminal inside the `vestigium` folder and run:
+From the project root:
 
 ```bash
 python examples/basic_error.py
 ```
 
-Generated reports are stored in:
+Reports are written to:
 
 ```text
 .reports/
+```
+
+## Development
+
+Install the development tools:
+
+```bash
+python -m pip install -r requirements-dev.txt
+```
+
+Run the test suite:
+
+```bash
+pytest
+```
+
+Run tests with coverage:
+
+```bash
+pytest --cov=src --cov-report=term-missing
+```
+
+Check and format the code:
+
+```bash
+ruff check .
+ruff format --check .
+```
+
+Run the type checker:
+
+```bash
+mypy src
 ```
 
 ## Current scope
@@ -42,3 +74,6 @@ Generated reports are stored in:
 - Captures local variables from the failing frame.
 - Redacts common sensitive values.
 - Creates JSON and plain-text reports.
+- Restores the previous exception handler with `stop()`.
+
+Automatic replay and framework integrations are planned for later versions.

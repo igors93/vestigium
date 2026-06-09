@@ -1,3 +1,3 @@
-from .api import start
+from .api import start, stop
 
-__all__ = ["start"]
+__all__ = ["start", "stop"]

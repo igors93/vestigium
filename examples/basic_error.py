@@ -6,15 +6,15 @@ from pathlib import Path
 project_root = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(project_root))
 
-from src import start
+from src import start  # noqa: E402
 
 
 start(project_name="sample-store")
 
 
-def calculate_total(price, discount):
-    return price - discount
+def calculate_total(price: str, discount: int) -> int:
+    password = "this-value-must-not-appear"
+    return price - discount  # type: ignore[operator]
 
 
-password = "this-value-must-not-appear"
 calculate_total("100", 10)
