@@ -7,7 +7,7 @@ from typing import Any
 @dataclass(frozen=True, slots=True)
 class FrameInfo:
     file: str
-    line: int
+    line: int | None
     function: str
     source: str | None
 

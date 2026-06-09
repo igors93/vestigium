@@ -4,7 +4,6 @@ import sys
 from types import TracebackType
 
 import pytest
-
 import src.core.handler as handler_module
 from src.config import Config
 from src.core.handler import install_handler, uninstall_handler

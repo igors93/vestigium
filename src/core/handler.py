@@ -10,7 +10,6 @@ from src.storage.json_store import save_json_report
 
 from .context import build_report
 
-
 ExceptionHook = Callable[
     [type[BaseException], BaseException, TracebackType | None],
     None,

@@ -4,7 +4,6 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
-
 SENSITIVE_TERMS = {
     "authorization",
     "card",
@@ -31,9 +30,7 @@ def sanitize_mapping(
 
     return {
         name: (
-            "<redacted>"
-            if _is_sensitive_name(name)
-            else safe_repr(value, max_length)
+            "<redacted>" if _is_sensitive_name(name) else safe_repr(value, max_length)
         )
         for name, value in values.items()
     }

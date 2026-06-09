@@ -42,10 +42,8 @@ def render_text_report(report: ErrorReport) -> str:
 
     if report.frames:
         for index, frame in enumerate(report.frames, start=1):
-            lines.append(
-                f"{index}. {frame.function} "
-                f"({frame.file}:{frame.line})"
-            )
+            line = frame.line if frame.line is not None else "unknown"
+            lines.append(f"{index}. {frame.function} ({frame.file}:{line})")
             if frame.source:
                 lines.append(f"   Code: {frame.source}")
     else:

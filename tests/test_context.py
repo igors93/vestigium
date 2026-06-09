@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from src.config import Config
 from src.core.context import build_report
+from src.models.report import ErrorReport
 
 
-def _create_report(capture_locals: bool = True):
+def _create_report(capture_locals: bool = True) -> ErrorReport:
     try:
-        password = "private"
-        value = "invalid"
+        password = "private"  # noqa: F841
+        value = "invalid"  # noqa: F841
         raise ValueError("broken input")
     except ValueError as error:
         return build_report(

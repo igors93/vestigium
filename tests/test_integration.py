@@ -5,14 +5,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_uncaught_error_creates_reports(tmp_path):
     reports_directory = tmp_path / "reports"
 
-    code = f'''
+    code = f"""
 from src import start
 
 start(
@@ -27,7 +26,7 @@ def fail():
     return price - discount
 
 fail()
-'''
+"""
 
     result = subprocess.run(
         [sys.executable, "-c", code],

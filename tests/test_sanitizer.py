@@ -1,6 +1,5 @@
 import pytest
-
-from src.core.sanitizer import sanitize_mapping, safe_repr
+from src.core.sanitizer import safe_repr, sanitize_mapping
 
 
 class BrokenRepr:
