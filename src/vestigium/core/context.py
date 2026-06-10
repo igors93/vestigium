@@ -7,11 +7,11 @@ import traceback
 from datetime import datetime, timezone
 from types import TracebackType
 
-from src.config import Config
-from src.models.report import ErrorReport, FrameInfo
-from src.utils.identifiers import create_error_id
+from vestigium.config import Config
+from vestigium.models.report import ErrorReport, FrameInfo
+from vestigium.utils.identifiers import create_error_id
 
-from .sanitizer import sanitize_mapping
+from .sanitizer import sanitize_mapping, sanitize_text
 
 
 def build_report(
@@ -27,7 +27,7 @@ def build_report(
         project_name=config.project_name,
         captured_at=datetime.now(timezone.utc).isoformat(),
         exception_type=exception_type.__name__,
-        exception_message=str(exception),
+        exception_message=_extract_exception_message(exception),
         frames=_extract_frames(traceback_object),
         local_variables=_extract_locals(traceback_object, config),
         environment={
@@ -49,10 +49,19 @@ def _extract_frames(
             file=frame.filename,
             line=frame.lineno,
             function=frame.name,
-            source=frame.line,
+            source=sanitize_text(frame.line) if frame.line is not None else None,
         )
         for frame in traceback.extract_tb(traceback_object)
     ]
+
+
+def _extract_exception_message(exception: BaseException) -> str:
+    try:
+        message = str(exception)
+    except Exception:
+        return f"<{type(exception).__name__}: unavailable>"
+
+    return sanitize_text(message)
 
 
 def _extract_locals(

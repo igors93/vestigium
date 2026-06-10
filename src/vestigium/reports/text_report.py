@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.config import Config
-from src.models.report import ErrorReport
+from vestigium.config import Config
+from vestigium.models.report import ErrorReport
 
 
 def save_text_report(

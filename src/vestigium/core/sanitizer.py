@@ -4,6 +4,8 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
+from logprivacy import CleanerPolicy, clean
+
 SENSITIVE_TERMS = {
     "authorization",
     "card",
@@ -21,6 +23,9 @@ SENSITIVE_COMPACT_NAMES = {
     "cardnumber",
 }
 
+_LOG_PRIVACY_POLICY = CleanerPolicy.default()
+_REDACTION_FAILURE = "<redaction unavailable>"
+
 
 def sanitize_mapping(
     values: Mapping[str, Any],
@@ -36,6 +41,12 @@ def sanitize_mapping(
     }
 
 
+def sanitize_text(value: str) -> str:
+    """Redact sensitive content from text."""
+
+    return _clean_text(value)
+
+
 def safe_repr(value: Any, max_length: int = 500) -> str:
     """Return a defensive and size-limited representation."""
 
@@ -45,12 +56,29 @@ def safe_repr(value: Any, max_length: int = 500) -> str:
     try:
         rendered = repr(value)
     except Exception:
-        rendered = f"<{type(value).__name__}: unavailable>"
+        return f"<{type(value).__name__}: unavailable>"
 
-    if len(rendered) <= max_length:
-        return rendered
+    cleaned = sanitize_text(rendered)
+    return _truncate_text(cleaned, max_length)
 
-    return f"{rendered[:max_length]}...<truncated>"
+
+def _clean_text(value: str) -> str:
+    try:
+        cleaned: object = clean(value, policy=_LOG_PRIVACY_POLICY)
+    except Exception:
+        return _REDACTION_FAILURE
+
+    if isinstance(cleaned, str):
+        return cleaned
+
+    return str(cleaned)
+
+
+def _truncate_text(value: str, max_length: int) -> str:
+    if len(value) <= max_length:
+        return value
+
+    return f"{value[:max_length]}...<truncated>"
 
 
 def _is_sensitive_name(name: str) -> bool:

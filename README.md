@@ -18,7 +18,9 @@ When an uncaught exception happens, Vestigium records:
 - a unique identifier for the error.
 
 Sensitive values such as passwords, tokens, cookies, API keys, and card
-numbers are redacted before the report is written.
+numbers are redacted before the report is written. Vestigium uses
+LogPrivacy for content-level redaction in exception messages, traceback
+source lines, and rendered local values.
 
 ## Project structure
 
@@ -34,12 +36,13 @@ vestigium/
 ├── examples/
 │   └── basic_error.py
 ├── src/
-│   ├── core/
-│   ├── integrations/
-│   ├── models/
-│   ├── reports/
-│   ├── storage/
-│   └── utils/
+│   └── vestigium/
+│       ├── core/
+│       ├── integrations/
+│       ├── models/
+│       ├── reports/
+│       ├── storage/
+│       └── utils/
 ├── tests/
 ├── pyproject.toml
 └── requirements-dev.txt
@@ -76,7 +79,7 @@ text reports inside:
 ## Basic usage
 
 ```python
-from src import start
+from vestigium import start
 
 start(project_name="my-application")
 ```
@@ -85,7 +88,7 @@ Vestigium can be disabled and the previous Python exception handler
 restored:
 
 ```python
-from src import stop
+from vestigium import stop
 
 stop()
 ```
@@ -95,8 +98,8 @@ stop()
 ```bash
 ruff check .
 ruff format --check .
-mypy src
-pytest --cov=src --cov-report=term-missing
+mypy src/vestigium
+pytest --cov=vestigium --cov-report=term-missing
 ```
 
 ## Documentation

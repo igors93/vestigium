@@ -3,9 +3,9 @@ from pathlib import Path
 
 # Make the local package available without installing the project.
 project_root = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(project_root / "src"))
 
-from src import start
+from vestigium import start
 
 start(project_name="sample-store")
 

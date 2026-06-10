@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import pytest
-from src.models.report import ErrorReport, FrameInfo
+
+from vestigium.models.report import ErrorReport, FrameInfo
 
 
 @pytest.fixture

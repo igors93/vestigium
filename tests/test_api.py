@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import sys
 
-from src import start, stop
-from src.config import Config
+from vestigium import start, stop
+from vestigium.config import Config
 
 
 def test_start_returns_config_and_installs_handler(tmp_path):

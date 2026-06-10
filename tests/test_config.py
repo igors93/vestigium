@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from src.config import Config
+from vestigium.config import Config
 
 
 def test_reports_path_returns_path_object(tmp_path):

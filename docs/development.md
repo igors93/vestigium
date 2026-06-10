@@ -13,8 +13,8 @@ python -m pip install -r requirements-dev.txt
 ```bash
 ruff check .
 ruff format --check .
-mypy src
-pytest --cov=src --cov-report=term-missing
+mypy src/vestigium
+pytest --cov=vestigium --cov-report=term-missing
 ```
 
 ## Apply safe Ruff fixes

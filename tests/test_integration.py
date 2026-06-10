@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -12,7 +13,7 @@ def test_uncaught_error_creates_reports(tmp_path):
     reports_directory = tmp_path / "reports"
 
     code = f"""
-from src import start
+from vestigium import start
 
 start(
     project_name="integration-test",
@@ -31,6 +32,10 @@ fail()
     result = subprocess.run(
         [sys.executable, "-c", code],
         cwd=PROJECT_ROOT,
+        env={
+            **os.environ,
+            "PYTHONPATH": str(PROJECT_ROOT / "src"),
+        },
         capture_output=True,
         text=True,
         check=False,

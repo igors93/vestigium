@@ -1,10 +1,40 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vestigium"
+version = "0.1.0"
+description = "Capture structured context for uncaught Python exceptions."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "Vestigium Contributors" },
+]
+dependencies = [
+    "logprivacy>=0.5.1,<1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "mypy",
+    "pytest",
+    "pytest-cov",
+    "ruff",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 addopts = "-ra --strict-config --strict-markers"
 
 [tool.coverage.run]
 branch = true
-source = ["src"]
+source = ["vestigium"]
 
 [tool.coverage.report]
 show_missing = true
@@ -36,7 +66,7 @@ indent-style = "space"
 
 [tool.mypy]
 python_version = "3.10"
-files = ["src"]
+files = ["src/vestigium"]
 strict = true
 warn_unused_configs = true
 show_error_codes = true

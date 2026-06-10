@@ -1,4 +1,1 @@
-mypy
-pytest
-pytest-cov
-ruff
+-e .[dev]

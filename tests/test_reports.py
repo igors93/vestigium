@@ -1,6 +1,6 @@
-from src.config import Config
-from src.models.report import ErrorReport
-from src.reports.text_report import render_text_report, save_text_report
+from vestigium.config import Config
+from vestigium.models.report import ErrorReport
+from vestigium.reports.text_report import render_text_report, save_text_report
 
 
 def test_render_text_report_contains_main_sections(
@@ -38,6 +38,26 @@ def test_render_text_report_supports_missing_line(
     )
 
     assert "app.py:unknown" in render_text_report(report)
+
+
+def test_render_text_report_supports_empty_context(
+    sample_report: ErrorReport,
+):
+    report = ErrorReport(
+        error_id=sample_report.error_id,
+        project_name=sample_report.project_name,
+        captured_at=sample_report.captured_at,
+        exception_type=sample_report.exception_type,
+        exception_message=sample_report.exception_message,
+        frames=[],
+        local_variables={},
+        environment=sample_report.environment,
+    )
+
+    rendered = render_text_report(report)
+
+    assert "No traceback frames were captured." in rendered
+    assert "No local variables were captured." in rendered
 
 
 def test_save_text_report_creates_file(

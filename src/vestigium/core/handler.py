@@ -4,9 +4,9 @@ import sys
 from collections.abc import Callable
 from types import TracebackType
 
-from src.config import Config
-from src.reports.text_report import save_text_report
-from src.storage.json_store import save_json_report
+from vestigium.config import Config
+from vestigium.reports.text_report import save_text_report
+from vestigium.storage.json_store import save_json_report
 
 from .context import build_report
 

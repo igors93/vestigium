@@ -1,8 +1,8 @@
 import json
 
-from src.config import Config
-from src.models.report import ErrorReport
-from src.storage.json_store import save_json_report
+from vestigium.config import Config
+from vestigium.models.report import ErrorReport
+from vestigium.storage.json_store import save_json_report
 
 
 def test_save_json_report_creates_valid_json(
