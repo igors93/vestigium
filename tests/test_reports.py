@@ -1,73 +1,42 @@
-from vestigium.config import Config
-from vestigium.models.report import ErrorReport
-from vestigium.reports.text_report import render_text_report, save_text_report
+from __future__ import annotations
+
+from vestigium import anomaly, capture_exception, configure, context, event
+from vestigium.reports.text_report import render_text_snapshot
 
 
-def test_render_text_report_contains_main_sections(
-    sample_report: ErrorReport,
-):
-    rendered = render_text_report(sample_report)
+def test_render_text_snapshot_contains_factual_sections(memory_store):
+    configure(store=memory_store, capture_uncaught_exceptions=False)
 
-    assert "VESTIGIUM ERROR REPORT" in rendered
+    with context("process_order", order_id="ord-1"):
+        event("order_validated")
+        snapshot = anomaly("unexpected_order_state")
+
+    rendered = render_text_snapshot(snapshot)
+
+    assert "VESTIGIUM FORENSIC SNAPSHOT" in rendered
+    assert "Incident: anomaly/unexpected_order_state" in rendered
+    assert "Operation: process_order" in rendered
+    assert "order_validated" in rendered
+
+
+def test_render_text_snapshot_supports_exception(memory_store):
+    configure(store=memory_store, capture_uncaught_exceptions=False)
+
+    try:
+        raise ValueError("invalid value")
+    except ValueError as error:
+        snapshot = capture_exception(error)
+
+    rendered = render_text_snapshot(snapshot)
+
+    assert "EXCEPTION" in rendered
     assert "ValueError" in rendered
     assert "invalid value" in rendered
-    assert "password = <redacted>" in rendered
-    assert "app.py:10" in rendered
 
 
-def test_render_text_report_supports_missing_line(
-    sample_report: ErrorReport,
-):
-    frame = sample_report.frames[0]
-    report = ErrorReport(
-        error_id=sample_report.error_id,
-        project_name=sample_report.project_name,
-        captured_at=sample_report.captured_at,
-        exception_type=sample_report.exception_type,
-        exception_message=sample_report.exception_message,
-        frames=[
-            type(frame)(
-                file=frame.file,
-                line=None,
-                function=frame.function,
-                source=frame.source,
-            )
-        ],
-        local_variables=sample_report.local_variables,
-        environment=sample_report.environment,
-    )
+def test_render_text_snapshot_supports_empty_events(memory_store):
+    configure(store=memory_store, capture_uncaught_exceptions=False)
 
-    assert "app.py:unknown" in render_text_report(report)
+    snapshot = anomaly("manual_without_events")
 
-
-def test_render_text_report_supports_empty_context(
-    sample_report: ErrorReport,
-):
-    report = ErrorReport(
-        error_id=sample_report.error_id,
-        project_name=sample_report.project_name,
-        captured_at=sample_report.captured_at,
-        exception_type=sample_report.exception_type,
-        exception_message=sample_report.exception_message,
-        frames=[],
-        local_variables={},
-        environment=sample_report.environment,
-    )
-
-    rendered = render_text_report(report)
-
-    assert "No traceback frames were captured." in rendered
-    assert "No local variables were captured." in rendered
-
-
-def test_save_text_report_creates_file(
-    tmp_path,
-    sample_report: ErrorReport,
-):
-    destination = save_text_report(
-        sample_report,
-        Config(reports_directory=str(tmp_path)),
-    )
-
-    assert destination.exists()
-    assert destination.read_text(encoding="utf-8").startswith("VESTIGIUM ERROR REPORT")
+    assert "No events were recorded." in render_text_snapshot(snapshot)

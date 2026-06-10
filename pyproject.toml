@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "vestigium"
 version = "0.1.0"
-description = "Capture structured context for uncaught Python exceptions."
+description = "Exception-triggered forensic diagnostics snapshots for Python."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -26,6 +26,9 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+vestigium = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

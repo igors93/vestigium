@@ -1,6 +1,7 @@
-import pytest
+from __future__ import annotations
 
-from vestigium.core.sanitizer import safe_repr, sanitize_mapping, sanitize_text
+from vestigium.config import Config
+from vestigium.privacy.adapter import safe_repr, sanitize_text, sanitize_value
 
 
 class BrokenRepr:
@@ -8,84 +9,68 @@ class BrokenRepr:
         raise RuntimeError("cannot render")
 
 
-def test_sensitive_values_are_redacted():
-    result = sanitize_mapping(
+def test_secret_in_sensitive_key_is_sanitized():
+    sanitized = sanitize_value({"password": "secret-value"}, Config())
+
+    assert sanitized.value == {"password": "[SECRET]"}
+
+
+def test_secret_in_generic_value_is_sanitized():
+    sanitized = sanitize_value(
+        {"message": "Login failed for ana@example.com with password=123456"},
+        Config(),
+    )
+
+    assert sanitized.value == {
+        "message": "Login failed for [EMAIL] with password=[SECRET]"
+    }
+
+
+def test_nested_url_and_card_are_sanitized():
+    sanitized = sanitize_value(
         {
-            "username": "alex",
-            "password": "secret-value",
-            "api_token": "token-value",
-            "apikey": "key-value",
-            "cardNumber": "1234",
-        }
+            "payload": {
+                "url": "https://example.test/callback?token=abc123456789",
+                "card": "4111111111111111",
+            }
+        },
+        Config(),
     )
 
-    assert result["username"] == "'alex'"
-    assert result["password"] == "<redacted>"
-    assert result["api_token"] == "<redacted>"
-    assert result["apikey"] == "<redacted>"
-    assert result["cardNumber"] == "<redacted>"
+    assert sanitized.value == {"payload": {"url": "[URL]", "card": "[CREDIT_CARD]"}}
 
 
-def test_normal_names_are_not_false_positives():
-    result = sanitize_mapping(
-        {
-            "secretary_name": "Ana",
-            "tokenizer": "basic",
-        }
-    )
+def test_broken_repr_does_not_break_sanitization():
+    sanitized = safe_repr(BrokenRepr(), Config())
 
-    assert result["secretary_name"] == "'Ana'"
-    assert result["tokenizer"] == "'basic'"
+    assert "BrokenRepr" in str(sanitized.value)
+    assert "repr_unavailable" in sanitized.limitations
 
 
-def test_sensitive_content_is_cleaned_in_regular_values():
-    result = sanitize_mapping(
-        {
-            "message": "Login failed for ana@example.com with password=123456",
-            "payment_reference": "4111111111111111",
-        }
-    )
+def test_recursive_structure_is_replaced_with_limitation():
+    value: dict[str, object] = {}
+    value["self"] = value
 
-    assert result["message"] == "'Login failed for [EMAIL] with password=[SECRET]'"
-    assert result["payment_reference"] == "'[CREDIT_CARD]'"
+    sanitized = sanitize_value(value, Config())
+
+    assert sanitized.value == {"self": "<recursion detected>"}
+    assert "recursive_value_replaced" in sanitized.limitations
 
 
-def test_sensitive_text_is_cleaned():
-    assert sanitize_text("User ana@example.com used password=123456") == (
-        "User [EMAIL] used password=[SECRET]"
-    )
+def test_large_value_is_truncated():
+    sanitized = sanitize_text("x" * 100, Config(max_value_length=10))
+
+    assert str(sanitized.value).endswith("...<truncated>")
+    assert "value_truncated" in sanitized.limitations
 
 
-def test_long_values_are_truncated():
-    rendered = safe_repr("x" * 100, max_length=10)
-
-    assert rendered.endswith("...<truncated>")
-
-
-def test_broken_repr_does_not_break_capture():
-    rendered = safe_repr(BrokenRepr())
-
-    assert rendered == "<BrokenRepr: unavailable>"
-
-
-def test_negative_max_length_is_rejected():
-    with pytest.raises(ValueError, match="zero or greater"):
-        safe_repr("value", max_length=-1)
-
-
-def test_logprivacy_failure_does_not_return_uncleaned_value(monkeypatch):
+def test_sanitizer_failure_returns_safe_marker(monkeypatch):
     def fail_to_clean(*args, **kwargs):
         raise RuntimeError("cleaning failed")
 
-    monkeypatch.setattr("vestigium.core.sanitizer.clean", fail_to_clean)
+    monkeypatch.setattr("vestigium.privacy.adapter.clean", fail_to_clean)
 
-    assert safe_repr("email=ana@example.com") == "<redaction unavailable>"
+    sanitized = sanitize_text("email=ana@example.com", Config())
 
-
-def test_unexpected_logprivacy_result_is_converted_to_text(monkeypatch):
-    def clean_to_number(*args, **kwargs):
-        return 123
-
-    monkeypatch.setattr("vestigium.core.sanitizer.clean", clean_to_number)
-
-    assert safe_repr("value") == "123"
+    assert sanitized.value == "<redaction unavailable>"
+    assert "privacy_sanitizer_failed" in sanitized.limitations

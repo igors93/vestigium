@@ -1,118 +1,81 @@
 from __future__ import annotations
 
-from vestigium.config import Config
-from vestigium.core.context import build_report
-from vestigium.models.report import ErrorReport
+from threading import Thread
+
+from vestigium import anomaly, configure, context, event
+from vestigium.runtime import get_state
 
 
-def _create_report(capture_locals: bool = True) -> ErrorReport:
-    try:
-        password = "private"  # noqa: F841
-        value = "invalid"  # noqa: F841
-        raise ValueError("broken input")
-    except ValueError as error:
-        return build_report(
-            exception_type=type(error),
-            exception=error,
-            traceback_object=error.__traceback__,
-            config=Config(
-                project_name="context-test",
-                capture_locals=capture_locals,
-            ),
-        )
+def test_context_is_cleaned_after_normal_exit(memory_store):
+    configure(store=memory_store, capture_uncaught_exceptions=False)
+
+    with context("create_order", order_id="ord-1"):
+        event("order_loaded")
+
+    assert get_state().contexts == ()
+    assert get_state().events == ()
+    assert memory_store.snapshots == []
 
 
-def _create_nested_report() -> ErrorReport:
-    def fail() -> None:
-        token = "abc123456789"  # noqa: F841
-        raise ValueError("nested failure")
+def test_nested_contexts_are_represented_in_snapshot(memory_store):
+    configure(store=memory_store, capture_uncaught_exceptions=False)
 
-    try:
-        fail()
-    except ValueError as error:
-        return build_report(
-            exception_type=type(error),
-            exception=error,
-            traceback_object=error.__traceback__,
-            config=Config(project_name="context-test"),
-        )
+    with context("handle_request", request_id="req-1"):
+        event("request_received")
+        with context("process_payment", payment_id="pay-1"):
+            event("provider_called")
+            snapshot = anomaly("provider_answered_without_id")
 
-
-def _create_sensitive_text_report() -> ErrorReport:
-    try:
-        raise ValueError("email=ana@example.com password=123456")
-    except ValueError as error:
-        return build_report(
-            exception_type=type(error),
-            exception=error,
-            traceback_object=error.__traceback__,
-            config=Config(project_name="context-test"),
-        )
-
-
-class BrokenStrError(Exception):
-    def __str__(self) -> str:
-        raise RuntimeError("cannot render")
-
-
-def test_build_report_captures_error_context():
-    report = _create_report()
-
-    assert report.project_name == "context-test"
-    assert report.exception_type == "ValueError"
-    assert report.exception_message == "broken input"
-    assert report.frames[-1].function == "_create_report"
-    assert report.local_variables["password"] == "<redacted>"
-    assert report.local_variables["value"] == "'invalid'"
-    assert "python_version" in report.environment
-
-
-def test_build_report_captures_locals_from_failing_frame():
-    report = _create_nested_report()
-
-    assert [frame.function for frame in report.frames][-2:] == [
-        "_create_nested_report",
-        "fail",
+    assert snapshot is not None
+    assert [frame["name"] for frame in snapshot.context.active] == [
+        "handle_request",
+        "process_payment",
     ]
-    assert report.local_variables["token"] == "<redacted>"
+    assert [event.name for event in snapshot.events] == [
+        "request_received",
+        "provider_called",
+    ]
 
 
-def test_build_report_sanitizes_exception_message_and_source():
-    report = _create_sensitive_text_report()
-    source = report.frames[-1].source
-
-    assert report.exception_message == "email=[EMAIL] password=[SECRET]"
-    assert source is not None
-    assert "[EMAIL]" in source
-    assert "[SECRET]" in source
-    assert "ana@example.com" not in source
-    assert "123456" not in source
-
-
-def test_build_report_handles_broken_exception_message():
-    report = build_report(
-        exception_type=BrokenStrError,
-        exception=BrokenStrError(),
-        traceback_object=None,
-        config=Config(),
+def test_event_buffer_is_circular(memory_store):
+    configure(
+        store=memory_store,
+        event_limit=2,
+        capture_uncaught_exceptions=False,
     )
 
-    assert report.exception_message == "<BrokenStrError: unavailable>"
+    with context("sync_inventory"):
+        event("step_1")
+        event("step_2")
+        event("step_3")
+        snapshot = anomaly("inventory_mismatch")
+
+    assert snapshot is not None
+    assert [event.name for event in snapshot.events] == ["step_2", "step_3"]
+    assert "event_buffer_truncated" in snapshot.limitations
 
 
-def test_build_report_can_disable_local_capture():
-    report = _create_report(capture_locals=False)
+def test_contextvars_isolate_threads(memory_store):
+    configure(store=memory_store, capture_uncaught_exceptions=False)
 
-    assert report.local_variables == {}
+    def run(worker_id: str) -> None:
+        with context("worker", worker_id=worker_id):
+            event("started", worker_id=worker_id)
+            anomaly("worker_anomaly", actual={"worker_id": worker_id})
 
+    threads = [Thread(target=run, args=(f"worker-{index}",)) for index in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
 
-def test_build_report_accepts_missing_traceback():
-    report = build_report(
-        exception_type=RuntimeError,
-        exception=RuntimeError("missing traceback"),
-        traceback_object=None,
-        config=Config(),
-    )
+    worker_ids = {
+        snapshot.context.active[0]["data"]["worker_id"]
+        for snapshot in memory_store.snapshots
+    }
+    event_worker_ids = {
+        snapshot.events[0].data["worker_id"] for snapshot in memory_store.snapshots
+    }
 
-    assert report.frames == []
-    assert report.local_variables == {}
+    assert worker_ids == {"worker-0", "worker-1"}
+    assert event_worker_ids == {"worker-0", "worker-1"}

@@ -1,67 +1,121 @@
 # Usage
 
-Vestigium is enabled once, near the application entry point.
+Vestigium is configured once near the application entry point.
 
 ```python
-from vestigium import start
+from vestigium import configure
 
-start(
+configure(
     project_name="my-application",
-    reports_directory=".reports",
-    capture_locals=True,
+    snapshot_directory=".vestigium",
+    application_version="1.4.0",
 )
 ```
 
-After `start()` is called, uncaught exceptions in the main process are
-passed through the Vestigium handler.
+## Logical Context
 
-## Generated files
+Use `context()` to describe the operation currently in progress.
+Contexts may be nested and are isolated with `contextvars`.
 
-Every captured exception creates two files with the same error identifier:
+```python
+from vestigium import context
+
+with context("handle_request", request_id=request.id):
+    with context("create_order", order_id=order.id):
+        ...
+```
+
+Context data is bounded and sanitized before it can be persisted.
+
+## Breadcrumb Events
+
+Use `event()` for important execution steps. Events are held in a bounded
+in-memory buffer and are not written during normal execution.
+
+```python
+from vestigium import event
+
+event("order_validated", item_count=len(order.items))
+```
+
+When the event limit is reached, Vestigium keeps the most recent events
+and records an `event_buffer_truncated` limitation in the next snapshot.
+
+## Triggering Incidents
+
+### Anomaly
+
+```python
+from vestigium import anomaly
+
+anomaly(
+    "approved_payment_without_transaction_id",
+    expected={"transaction_id": "non-empty"},
+    actual={"transaction_id": None},
+)
+```
+
+### Invariant
+
+```python
+from vestigium import invariant
+
+invariant(
+    account.balance >= 0,
+    "account_balance_must_not_be_negative",
+    expected={"balance": ">= 0"},
+    actual={"balance": account.balance},
+)
+```
+
+By default, `invariant()` captures evidence and lets the application
+continue. Pass `raise_on_failure=True` to raise `InvariantViolation` after
+the snapshot attempt.
+
+### Explicit Exception
+
+```python
+from vestigium import capture_exception
+
+try:
+    process()
+except Exception as error:
+    capture_exception(error)
+    raise
+```
+
+## Snapshot Files
+
+Default JSON snapshots are written to `.vestigium/`:
 
 ```text
-.reports/
-├── err-20260608-120000-ab12cd34.json
-└── err-20260608-120000-ab12cd34.txt
+.vestigium/
+└── inc-20260610-120000-ab12cd34.json
 ```
 
-The JSON file is intended for machines, automation, and future AI
-integrations. The text file is intended for developers.
+The JSON schema is versioned and separates incident, exception, execution,
+context, events, reproduction facts, environment, application data,
+limitations, and privacy metadata.
 
-Report text is sanitized before either file is written. Sensitive local
-variable names are fully redacted, and exception messages, traceback
-source lines, and rendered local values are cleaned with LogPrivacy to
-mask content such as emails, tokens, URLs, and card-like values.
+## Privacy
 
-## Disabling local variable capture
+Vestigium uses LogPrivacy as its official sanitization engine. Before
+persistence, it sanitizes exception messages, traceback source lines,
+locals, context data, events, expected and actual states, metadata, URLs,
+and configuration-like values. If sanitization fails, Vestigium replaces
+the affected value with a safe marker.
+
+## Migration
+
+The old `start(project_name=..., reports_directory=...)` API remains as a
+compatibility wrapper around `configure()`, but new code should use:
 
 ```python
-from vestigium import start
+from vestigium import configure
 
-start(
-    project_name="my-application",
-    capture_locals=False,
-)
+configure(project_name="my-application", snapshot_directory=".vestigium")
 ```
 
-## Restoring the previous exception handler
-
-```python
-from vestigium import stop
-
-stop()
-```
-
-## Important limitation
-
-Exceptions caught by the application are not uncaught exceptions:
-
-```python
-try:
-    dangerous_operation()
-except Exception:
-    pass
-```
-
-Vestigium does not automatically record this example because the program
-handled the exception itself.
+Vestigium now writes one structured JSON snapshot by default. Text output
+is available through `vestigium.reports.render_text_snapshot()` when a
+caller wants a readable summary.

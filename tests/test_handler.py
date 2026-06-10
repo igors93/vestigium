@@ -5,40 +5,46 @@ from types import TracebackType
 
 import pytest
 
-import vestigium.core.handler as handler_module
-from vestigium.config import Config
-from vestigium.core.handler import install_handler, uninstall_handler
+from tests.conftest import FailingStore
+from vestigium import capture_exception, configure, context, event, stop
 
 
-@pytest.fixture(autouse=True)
-def restore_exception_handler():
-    original_hook = sys.excepthook
-    uninstall_handler()
+def test_capture_exception_records_traceback_and_chain(memory_store):
+    configure(store=memory_store, capture_uncaught_exceptions=False)
 
-    yield
+    try:
+        try:
+            raise ValueError("token=abc123456789")
+        except ValueError as cause:
+            raise RuntimeError("wrapped failure") from cause
+    except RuntimeError as error:
+        snapshot = capture_exception(error)
 
-    uninstall_handler()
-    sys.excepthook = original_hook
-
-
-def test_install_handler_is_idempotent(monkeypatch, tmp_path):
-    def original_hook(
-        exception_type: type[BaseException],
-        exception: BaseException,
-        traceback_object: TracebackType | None,
-    ) -> None:
-        return None
-
-    monkeypatch.setattr(sys, "excepthook", original_hook)
-
-    install_handler(Config(reports_directory=str(tmp_path)))
-    installed_hook = sys.excepthook
-    install_handler(Config(reports_directory=str(tmp_path / "other")))
-
-    assert sys.excepthook is installed_hook
+    assert snapshot is not None
+    assert snapshot.exception is not None
+    assert snapshot.incident.type == "exception"
+    assert snapshot.exception.type == "RuntimeError"
+    assert snapshot.exception.chain[0]["type"] == "ValueError"
+    assert "[SECRET]" in snapshot.exception.chain[0]["message"]
+    assert snapshot.exception.traceback
 
 
-def test_handler_creates_reports_and_calls_original(monkeypatch, tmp_path):
+def test_context_exception_is_captured_and_original_is_preserved(memory_store):
+    configure(store=memory_store, capture_uncaught_exceptions=False)
+
+    with pytest.raises(RuntimeError, match="original failure"):
+        with context("dangerous_operation"):
+            event("before_failure")
+            raise RuntimeError("original failure")
+
+    snapshot = memory_store.snapshots[0]
+    assert snapshot.incident.source == "context_manager"
+    assert snapshot.exception is not None
+    assert snapshot.exception.message == "original failure"
+    assert [event.name for event in snapshot.events] == ["before_failure"]
+
+
+def test_excepthook_creates_snapshot_and_calls_original(monkeypatch, memory_store):
     calls: list[str] = []
 
     def original_hook(
@@ -49,44 +55,24 @@ def test_handler_creates_reports_and_calls_original(monkeypatch, tmp_path):
         calls.append(exception_type.__name__)
 
     monkeypatch.setattr(sys, "excepthook", original_hook)
-    install_handler(Config(reports_directory=str(tmp_path)))
+    configure(store=memory_store)
 
     try:
-        local_value = "captured"
-        raise RuntimeError(local_value)
+        raise RuntimeError("uncaught")
     except RuntimeError as error:
         sys.excepthook(type(error), error, error.__traceback__)
 
     assert calls == ["RuntimeError"]
-    assert len(list(tmp_path.glob("*.json"))) == 1
-    assert len(list(tmp_path.glob("*.txt"))) == 1
+    assert len(memory_store.snapshots) == 1
+    assert memory_store.snapshots[0].incident.source == "sys.excepthook"
 
 
-def test_recording_failure_does_not_hide_original_error(
-    monkeypatch,
-    tmp_path,
-):
-    calls: list[str] = []
+def test_capture_failure_does_not_replace_application_exception():
+    configure(store=FailingStore(), capture_uncaught_exceptions=False)
+    error = ValueError("original")
 
-    def original_hook(
-        exception_type: type[BaseException],
-        exception: BaseException,
-        traceback_object: TracebackType | None,
-    ) -> None:
-        calls.append(str(exception))
+    snapshot = capture_exception(error)
 
-    def fail_to_build_report(*args, **kwargs):
-        raise OSError("storage unavailable")
-
-    monkeypatch.setattr(sys, "excepthook", original_hook)
-    monkeypatch.setattr(
-        handler_module,
-        "build_report",
-        fail_to_build_report,
-    )
-    install_handler(Config(reports_directory=str(tmp_path)))
-
-    error = ValueError("original failure")
-    sys.excepthook(ValueError, error, None)
-
-    assert calls == ["original failure"]
+    assert snapshot is not None
+    assert str(error) == "original"
+    stop()

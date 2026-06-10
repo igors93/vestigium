@@ -1,99 +1,128 @@
 # Vestigium
 
-Vestigium is a small Python library that records the context of uncaught
-exceptions.
+Vestigium is an exception- and abnormal-behavior-triggered forensic
+diagnostics library that produces structured snapshots for failure
+reproduction and investigation.
 
-Its goal is to make failures easier to understand by creating structured
-reports that can be read by developers and, in the future, by AI tools.
+It records factual evidence about an execution. It does not infer root
+causes, propose fixes, retry operations, apply fallbacks, run circuit
+breakers, stream continuous logs, or perform automatic replay.
 
-## What Vestigium captures
+## Problem
 
-When an uncaught exception happens, Vestigium records:
+Production failures often disappear before a developer can inspect the
+relevant state. Logs may be incomplete, noisy, or missing the operation
+context needed to reproduce the issue. Vestigium keeps a small bounded
+execution context in memory and persists it only when an incident is
+explicitly triggered or an exception is captured.
 
-- the exception type and message;
-- the traceback frames;
-- the source line related to each frame;
-- local variables from the failing frame;
-- basic runtime information;
-- a unique identifier for the error.
+## What It Captures
 
-Sensitive values such as passwords, tokens, cookies, API keys, and card
-numbers are redacted before the report is written. Vestigium uses
-LogPrivacy for content-level redaction in exception messages, traceback
-source lines, and rendered local values.
+Snapshots can include:
 
-## Project structure
+- incident type, name, severity, origin, expected state, and observed state;
+- active logical operation and nested context data;
+- recent bounded breadcrumbs;
+- exception type, message, traceback, chain, and failing-frame locals;
+- environment and application version facts;
+- reproduction hints based on factual data;
+- limitations that describe truncated or incomplete capture;
+- privacy metadata.
 
-```text
-vestigium/
-├── .github/
-│   └── workflows/
-│       └── quality.yml
-├── docs/
-│   ├── architecture.md
-│   ├── development.md
-│   └── usage.md
-├── examples/
-│   └── basic_error.py
-├── src/
-│   └── vestigium/
-│       ├── core/
-│       ├── integrations/
-│       ├── models/
-│       ├── reports/
-│       ├── storage/
-│       └── utils/
-├── tests/
-├── pyproject.toml
-└── requirements-dev.txt
-```
+All persisted data is sanitized through LogPrivacy before it is written.
 
-## Quick start
-
-Create and activate a virtual environment:
+## Install
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+python -m pip install -e ".[dev]"
 ```
 
-Install the development dependencies:
-
-```bash
-python -m pip install -r requirements-dev.txt
-```
-
-Run the example:
-
-```bash
-python examples/basic_error.py
-```
-
-The example intentionally raises an exception. Vestigium creates JSON and
-text reports inside:
-
-```text
-.reports/
-```
-
-## Basic usage
+## Minimal Usage
 
 ```python
-from vestigium import start
+from vestigium import configure
 
-start(project_name="my-application")
+configure(project_name="my-application")
 ```
 
-Vestigium can be disabled and the previous Python exception handler
-restored:
+With this configuration, uncaught exceptions in the main process create
+JSON snapshots in `.vestigium/`.
+
+## Context And Anomaly
 
 ```python
-from vestigium import stop
+from vestigium import anomaly, configure, context, event
 
-stop()
+configure(project_name="checkout")
+
+with context("process_payment", order_id=order.id, customer_id=order.customer_id):
+    event("payment_requested", provider=provider.name)
+    result = provider.charge(order.total)
+    event("payment_provider_answered", status=result.status)
+
+    if result.status == "approved" and result.transaction_id is None:
+        anomaly(
+            "approved_payment_without_transaction_id",
+            expected={"transaction_id": "non-empty"},
+            actual={
+                "status": result.status,
+                "transaction_id": result.transaction_id,
+            },
+        )
 ```
 
-## Quality checks
+Events are kept in a bounded in-memory buffer. They are discarded when no
+incident happens.
+
+## Explicit Exception Capture
+
+```python
+from vestigium import capture_exception
+
+try:
+    process()
+except Exception as error:
+    capture_exception(error)
+    raise
+```
+
+Vestigium never swallows the original exception.
+
+## Snapshot Shape
+
+```json
+{
+  "schema_version": "1.0",
+  "incident": {},
+  "exception": {},
+  "execution": {},
+  "context": {},
+  "events": [],
+  "reproduction": {},
+  "environment": {},
+  "application": {},
+  "limitations": [],
+  "privacy": {}
+}
+```
+
+## Project Structure
+
+```text
+src/vestigium/
+├── api.py
+├── config.py
+├── incidents/
+├── integrations/
+├── privacy/
+├── reports/
+├── runtime.py
+├── snapshots/
+├── storage/
+└── utils/
+```
+
+## Quality Checks
 
 ```bash
 ruff check .
@@ -102,22 +131,10 @@ mypy src/vestigium
 pytest --cov=vestigium --cov-report=term-missing
 ```
 
-## Documentation
+## Current Limitations
 
-- [Usage](docs/usage.md)
-- [Architecture](docs/architecture.md)
-- [Development](docs/development.md)
-
-## Current limitations
-
-This is an early version. It currently captures uncaught exceptions from
-the main Python process only.
-
-It does not yet support:
-
-- automatic replay;
-- thread exception handlers;
-- async task integrations;
-- Django, Flask, FastAPI, or pytest plugins;
-- remote report storage;
-- automatic AI analysis.
+- Automatic capture currently focuses on `sys.excepthook`.
+- Thread and asyncio integrations are not separate first-class modules yet.
+- Snapshots are stored locally as JSON by default.
+- Text rendering exists as an optional helper, not as core persistence.
+- Vestigium records evidence; external people or tools perform diagnosis.

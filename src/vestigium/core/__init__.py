@@ -1,1 +1,0 @@
-"""Core error capture components."""

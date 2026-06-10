@@ -1,13 +1,6 @@
-import sys
-from pathlib import Path
+from vestigium import configure, context, event
 
-# Make the local package available without installing the project.
-project_root = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(project_root / "src"))
-
-from vestigium import start
-
-start(project_name="sample-store")
+configure(project_name="sample-store")
 
 
 def calculate_total(price: str, discount: int) -> int:
@@ -15,4 +8,6 @@ def calculate_total(price: str, discount: int) -> int:
     return price - discount  # type: ignore[operator]
 
 
-calculate_total("100", 10)
+with context("calculate_total", order_id="ord-123"):
+    event("calculation_started")
+    calculate_total("100", 10)

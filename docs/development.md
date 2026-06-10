@@ -5,10 +5,12 @@
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r requirements-dev.txt
+python -m pip install -e ".[dev]"
 ```
 
-## Run all checks
+`requirements-dev.txt` points to the same editable install.
+
+## Run All Checks
 
 ```bash
 ruff check .
@@ -17,37 +19,32 @@ mypy src/vestigium
 pytest --cov=vestigium --cov-report=term-missing
 ```
 
-## Apply safe Ruff fixes
+## Apply Safe Ruff Fixes
 
 ```bash
 ruff check . --fix
 ruff format .
 ```
 
-## Test organization
+## Test Organization
 
-- `test_api.py`: public start and stop functions;
-- `test_config.py`: configuration behavior;
-- `test_context.py`: exception context collection;
-- `test_handler.py`: global exception handler behavior;
-- `test_integration.py`: complete subprocess workflow;
-- `test_reports.py`: text report generation;
-- `test_sanitizer.py`: sensitive data handling;
-- `test_storage.py`: JSON persistence.
+- `test_api.py`: public API and compatibility wrappers;
+- `test_config.py`: configuration limits;
+- `test_context.py`: context nesting, cleanup, event buffers, isolation;
+- `test_handler.py`: exception capture and defensive behavior;
+- `test_integration.py`: subprocess workflow with uncaught exception;
+- `test_reports.py`: optional text rendering;
+- `test_sanitizer.py`: privacy adapter behavior;
+- `test_snapshots.py`: reproduction facts and limitations;
+- `test_storage.py`: JSON store and persistence boundary.
 
-## Intentional unused variables
+## Commit Guidance
 
-Some tests and examples create local variables only so Vestigium can capture
-them. These lines use `# noqa: F841` because the unused assignment is
-intentional and part of the behavior being tested.
-
-## Suggested commit order
-
-Keep changes focused:
+Keep commits focused around behavior:
 
 ```text
-test: expand error capture coverage
-fix: improve sensitive value redaction
-docs: add project documentation
-chore: configure quality checks
+feat: add forensic snapshot model
+feat: add context and event capture
+feat: add anomaly and exception incidents
+docs: describe forensic diagnostics workflow
 ```

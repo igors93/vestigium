@@ -9,15 +9,15 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_uncaught_error_creates_reports(tmp_path):
-    reports_directory = tmp_path / "reports"
+def test_uncaught_error_creates_forensic_snapshot(tmp_path):
+    snapshot_directory = tmp_path / "snapshots"
 
     code = f"""
-from vestigium import start
+from vestigium import configure, context, event
 
-start(
+configure(
     project_name="integration-test",
-    reports_directory={str(reports_directory)!r},
+    snapshot_directory={str(snapshot_directory)!r},
 )
 
 def fail():
@@ -26,7 +26,9 @@ def fail():
     discount = 10
     return price - discount
 
-fail()
+with context("calculate_total", order_id="ord-1"):
+    event("calculation_started")
+    fail()
 """
 
     result = subprocess.run(
@@ -43,15 +45,15 @@ fail()
 
     assert result.returncode != 0
 
-    json_reports = list(reports_directory.glob("*.json"))
-    text_reports = list(reports_directory.glob("*.txt"))
+    json_snapshots = list(snapshot_directory.glob("*.json"))
+    assert len(json_snapshots) == 1
 
-    assert len(json_reports) == 1
-    assert len(text_reports) == 1
+    snapshot = json.loads(json_snapshots[0].read_text(encoding="utf-8"))
 
-    report = json.loads(json_reports[0].read_text(encoding="utf-8"))
-
-    assert report["exception_type"] == "TypeError"
-    assert report["local_variables"]["password"] == "<redacted>"
-    assert report["local_variables"]["price"] == "'100'"
-    assert report["local_variables"]["discount"] == "10"
+    assert snapshot["schema_version"] == "1.0"
+    assert snapshot["incident"]["type"] == "exception"
+    assert snapshot["incident"]["operation"] == "calculate_total"
+    assert snapshot["exception"]["type"] == "TypeError"
+    assert snapshot["exception"]["traceback"][-1]["locals"]["password"] == "[SECRET]"
+    assert snapshot["exception"]["traceback"][-1]["locals"]["price"] == "100"
+    assert snapshot["events"][0]["name"] == "calculation_started"
