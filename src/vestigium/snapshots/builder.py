@@ -324,11 +324,17 @@ def _build_environment(
     config: Config,
     limitations: list[str],
 ) -> dict[str, JsonValue]:
+    try:
+        cwd: str | None = os.getcwd()
+    except OSError:
+        cwd = None
+        limitations.append("working_directory_unavailable")
+
     data = sanitize_value(
         {
             "python_version": sys.version.split()[0],
             "operating_system": platform.platform(),
-            "working_directory": os.getcwd(),
+            "working_directory": cwd,
             "timezone": datetime.now().astimezone().tzname(),
         },
         config,

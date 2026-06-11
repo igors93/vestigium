@@ -62,25 +62,28 @@ class OperationContext(AbstractContextManager["OperationContext"]):
     def __enter__(self) -> OperationContext:
         config = self._config_getter()
         state = get_state()
-        sanitized = sanitize_mapping(self._data, config)
-        name = _sanitize_name(self._name, config)
-        frame = ContextFrame(
-            name=name,
-            data=cast(dict[str, JsonValue], sanitized.value),
-        )
         self._previous_state = state
         self._previous_depth = len(state.contexts)
-        set_state(
-            RuntimeState(
-                contexts=(*state.contexts, frame),
-                events=state.events,
-                next_sequence=state.next_sequence,
-                limitations=_merge_limitations(
-                    state.limitations,
-                    tuple(sanitized.limitations),
-                ),
+        try:
+            sanitized = sanitize_mapping(self._data, config)
+            name = _sanitize_name(self._name, config)
+            frame = ContextFrame(
+                name=name,
+                data=cast(dict[str, JsonValue], sanitized.value),
             )
-        )
+            set_state(
+                RuntimeState(
+                    contexts=(*state.contexts, frame),
+                    events=state.events,
+                    next_sequence=state.next_sequence,
+                    limitations=_merge_limitations(
+                        state.limitations,
+                        tuple(sanitized.limitations),
+                    ),
+                )
+            )
+        except Exception:
+            pass
         return self
 
     def __exit__(
@@ -90,7 +93,10 @@ class OperationContext(AbstractContextManager["OperationContext"]):
         traceback_object: TracebackType | None,
     ) -> Literal[False]:
         if exception is not None:
-            self._exception_capture(exception, 3)
+            try:
+                self._exception_capture(exception, 3)
+            except Exception:
+                pass
 
         previous_state = self._previous_state or RuntimeState()
         current = get_state()
@@ -176,6 +182,8 @@ def capture_source(skip: int = 1) -> SourceLocation | None:
             function=frame.f_code.co_name,
             source=source,
         )
+    except Exception:
+        return None
     finally:
         del frame
 

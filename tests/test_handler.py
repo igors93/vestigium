@@ -9,6 +9,10 @@ from tests.conftest import FailingStore
 from vestigium import capture_exception, configure, context, event, stop
 
 
+def _raise_always(*args: object, **kwargs: object) -> object:
+    raise RuntimeError("internal crash")
+
+
 def test_capture_exception_records_traceback_and_chain(memory_store):
     configure(store=memory_store, capture_uncaught_exceptions=False)
 
@@ -76,3 +80,49 @@ def test_capture_failure_does_not_replace_application_exception():
     assert snapshot is not None
     assert str(error) == "original"
     stop()
+
+
+def test_build_failure_returns_none_without_raising(monkeypatch, memory_store):
+    configure(store=memory_store, capture_uncaught_exceptions=False)
+    monkeypatch.setattr("vestigium.api.build_snapshot", _raise_always)
+
+    result = capture_exception(ValueError("original"))
+
+    assert result is None
+
+
+def test_original_exception_preserved_when_snapshot_build_fails_in_context(
+    monkeypatch, memory_store
+):
+    configure(store=memory_store, capture_uncaught_exceptions=False)
+    monkeypatch.setattr("vestigium.api.build_snapshot", _raise_always)
+
+    with pytest.raises(ValueError, match="original"):
+        with context("operation"):
+            raise ValueError("original")
+
+
+def test_nested_contexts_create_one_snapshot_per_exception(memory_store):
+    configure(store=memory_store, capture_uncaught_exceptions=False)
+
+    with pytest.raises(RuntimeError):
+        with context("outer"):
+            with context("inner"):
+                raise RuntimeError("failure")
+
+    assert len(memory_store.snapshots) == 1
+
+
+def test_event_silently_absorbs_internal_failure(monkeypatch, memory_store):
+    configure(store=memory_store, capture_uncaught_exceptions=False)
+    monkeypatch.setattr("vestigium.api.record_event", _raise_always)
+
+    event("breadcrumb")
+
+
+def test_persistence_failure_is_reported_to_stderr(capsys):
+    configure(store=FailingStore(), capture_uncaught_exceptions=False)
+
+    capture_exception(ValueError("test"))
+
+    assert "[Vestigium]" in capsys.readouterr().err

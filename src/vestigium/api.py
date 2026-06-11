@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable, Sequence
 from functools import wraps
 from types import TracebackType
@@ -82,7 +83,10 @@ def context(name: str, **data: Any) -> OperationContext:
 def event(name: str, **data: Any) -> None:
     """Record a bounded in-memory breadcrumb for the current execution."""
 
-    record_event(name, data, get_config(), skip=3)
+    try:
+        record_event(name, data, get_config(), skip=3)
+    except Exception:
+        pass
 
 
 def anomaly(
@@ -302,37 +306,40 @@ def _capture_incident(
     exception: BaseException | None = None,
     traceback_object: TracebackType | None = None,
 ) -> Snapshot | None:
-    config = get_config()
-    incident = IncidentInput(
-        type=incident_type,
-        name=name,
-        message=message,
-        severity=severity,
-        source=source,
-        expected=expected,
-        actual=actual,
-        tags=tuple(tags),
-        metadata=metadata or {},
-        origin=capture_source(origin_skip),
-    )
-    snapshot = build_snapshot(
-        incident,
-        config=config,
-        state=get_state(),
-        exception=exception,
-        traceback_object=traceback_object,
-    )
-    _persist_snapshot(snapshot, config)
-    return snapshot
+    try:
+        config = get_config()
+        incident = IncidentInput(
+            type=incident_type,
+            name=name,
+            message=message,
+            severity=severity,
+            source=source,
+            expected=expected,
+            actual=actual,
+            tags=tuple(tags),
+            metadata=metadata or {},
+            origin=capture_source(origin_skip),
+        )
+        snapshot = build_snapshot(
+            incident,
+            config=config,
+            state=get_state(),
+            exception=exception,
+            traceback_object=traceback_object,
+        )
+        _persist_snapshot(snapshot, config)
+        return snapshot
+    except Exception as error:
+        print(f"[Vestigium] Snapshot capture failed: {error}", file=sys.stderr)
+        return None
 
 
 def _persist_snapshot(snapshot: Snapshot, config: Config) -> None:
     store = config.store or JsonSnapshotStore(config.snapshot_path)
     try:
         store.save(snapshot)
-    except Exception:
-        # Snapshot persistence must never replace the application failure.
-        return
+    except Exception as error:
+        print(f"[Vestigium] Snapshot persistence failed: {error}", file=sys.stderr)
 
 
 def _mark_exception_captured(exception: BaseException) -> None:
